@@ -55,7 +55,7 @@ namespace KatalogConverter.Model
             return "{" +
                 "\"katalogid\":\"" + katalogid + "\"," +
                 "\"lieferung\":\"" + lieferung + "\"," +
-                "\"katalog\":\"" + JsonConvert.SerializeObject(this.katalog.ToArray())+"\"" +
+                "\"katalog\":" + JsonConvert.SerializeObject(this.katalog.ToArray())+
                 "}"; 
         }
     }
