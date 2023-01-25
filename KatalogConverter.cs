@@ -176,7 +176,7 @@ namespace KatalogConverter
             byte[] encBytes = Encoding.Convert(enc, utf8, bytes);
             data = utf8.GetString(encBytes);
 
-            return data.Trim().StartsWith("'") && data.Trim().EndsWith("'") ? data.Substring(1, data.Length - 1) : data;
+            return data.Trim().StartsWith("'") && data.Trim().EndsWith("'") ? data.Substring(1, data.Length - 2) : data;
         }
 
         public Encoding GetEncoding(string filename)
@@ -196,6 +196,8 @@ namespace KatalogConverter
 
             log.Info("Lese Datei: " + file);
             Encoding enc = GetEncoding(file);
+            string aktFileDate = File.GetCreationTime(file).ToString("dd.MM.yyyy");
+
             using (TextFieldParser parser = new TextFieldParser(file, enc))
             {
                 parser.TextFieldType = FieldType.Delimited;
@@ -209,7 +211,7 @@ namespace KatalogConverter
                 log.Info("Spaltenindex Bezeichnung: " + Convert.ToString(this.col_bez));
              
                 string aktKatalogID = null;
-                string aktFileDate = File.GetCreationTime(file).ToString("dd.MM.yyyy");
+               
                 log.Info("Lieferdatum: " + aktFileDate );
 
                 
@@ -252,13 +254,17 @@ namespace KatalogConverter
                 var list = kataloge.Keys.ToList();
                 list.Sort();
 
-                Directory.CreateDirectory(outputpath);
+
+                string outputlieferung = Path.Combine(outputpath, aktFileDate);
+                Directory.CreateDirectory(outputlieferung);
                 log.Info("Anzahl Kataloge: " + Convert.ToString(kataloge.Count));
+
 
                 foreach (int key in list)
                 {
                     log.Debug("Schreibe Datei: "+ Convert.ToString(key) + ".json");
-                    File.WriteAllText(Path.Combine(outputpath, Convert.ToString(key) + ".json"), kataloge[key].ToString(),Encoding.UTF8);
+                    
+                    File.WriteAllText(Path.Combine(outputlieferung, Convert.ToString(key) + ".json"), kataloge[key].ToString(),Encoding.UTF8);
                 }
             }
             log.Info("Fertig.");
