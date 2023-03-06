@@ -25,7 +25,7 @@ namespace KatalogConverter
         private ILog log = LogManager.GetLogger(typeof(KatalogConverter));
         private string watchDir;
         private string watchFile;
-        private string[] output;
+        private Newtonsoft.Json.Linq.JArray output;
         private string delimiter;
 
         private int col_katId;
@@ -79,7 +79,10 @@ namespace KatalogConverter
             try
             {
                 log.Info("Dienst wird beendet.");
-                this.watcher.Dispose();
+                if (this.watcher != null)
+                {
+                    this.watcher.Dispose();
+                }
             }
             catch (Exception e)
             {
@@ -190,7 +193,7 @@ namespace KatalogConverter
             }
         }
 
-        public void convert(string file, string delimiter, string[] outputpaths) //PLXKRDS2, PLXKRDS4
+        public void convert(string file, string delimiter, Newtonsoft.Json.Linq.JArray outputpaths) //PLXKRDS2, PLXKRDS4
         {
             Dictionary<int, Katalog> kataloge = new Dictionary<int, Katalog>();
 
@@ -255,7 +258,7 @@ namespace KatalogConverter
                 list.Sort();
 
                 log.Info("Anzahl Kataloge: " + Convert.ToString(kataloge.Count));
-
+                
                 foreach (string outputpath in outputpaths)
                 {
                     string outputlieferung = Path.Combine(outputpath, aktFileDate);
