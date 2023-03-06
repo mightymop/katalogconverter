@@ -1,20 +1,14 @@
 ﻿using KatalogConverter.Model;
 using log4net;
 using log4net.Config;
-using log4net.Util;
 using Microsoft.VisualBasic.FileIO;
 using Newtonsoft.Json;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.ServiceProcess;
 using System.Text;
-using System.Threading.Tasks;
 using System.Timers;
 
 namespace KatalogConverter
@@ -34,8 +28,12 @@ namespace KatalogConverter
         private int col_refnr;
         private int col_bez;
 
+        private int errStartCount = 0;
+
         private string sourcefile;
         private Timer lazyTimer;
+
+        private static string ROLLOUTTXT = "rollout.txt";
 
         public KatalogConverter()
         {
@@ -47,24 +45,7 @@ namespace KatalogConverter
             log.Info("Dienst wird gestartet.");
             try
             {
-                string location = AppDomain.CurrentDomain.BaseDirectory;//System.Reflection.Assembly.GetEntryAssembly().Location;
-                string workdir = location.EndsWith(".exe") ? location.Substring(0, location.LastIndexOf(Path.PathSeparator)) : location;
-                Directory.SetCurrentDirectory(workdir);
-                XmlConfigurator.Configure(new FileInfo("log4net.config"));
-                log.Info("Arbeitsverzeichnis: " + workdir);
-
-                dynamic jsonSettings = JsonConvert.DeserializeObject(System.IO.File.ReadAllText("appsettings.json"));
-                this.watchDir = jsonSettings.watch_directory;
-                this.watchFile = jsonSettings.watch_filename;
-                this.output = jsonSettings.output;
-                this.delimiter  = jsonSettings.delimiter;
-
-                this.col_katId = jsonSettings.col_katId is string ? Convert.ToInt32(jsonSettings.col_katId) : jsonSettings.col_katId;
-                this.col_von = jsonSettings.col_von is string ? Convert.ToInt32(jsonSettings.col_von) : jsonSettings.col_von;
-                this.col_bis = jsonSettings.col_bis is string ? Convert.ToInt32(jsonSettings.col_bis) : jsonSettings.col_bis;
-                this.col_refnr = jsonSettings.col_refnr is string ? Convert.ToInt32(jsonSettings.col_refnr) : jsonSettings.col_refnr;
-                this.col_bez = jsonSettings.col_bez is string ? Convert.ToInt32(jsonSettings.col_bez) : jsonSettings.col_bez;
-
+                this.init();
                 this.watch(this.watchDir);
                 log.Info("Dienst überwacht Verzeichnis: "+this.watchDir);
             }
@@ -72,6 +53,27 @@ namespace KatalogConverter
             {
                 log.Error("Fehler beim Start des Dienstes.",e);
             }
+        }
+
+        public void init()
+        {
+            string location = AppDomain.CurrentDomain.BaseDirectory;//System.Reflection.Assembly.GetEntryAssembly().Location;
+            string workdir = location.EndsWith(".exe") ? location.Substring(0, location.LastIndexOf(Path.PathSeparator)) : location;
+            Directory.SetCurrentDirectory(workdir);
+            XmlConfigurator.Configure(new FileInfo("log4net.config"));
+            log.Info("Arbeitsverzeichnis: " + workdir);
+
+            dynamic jsonSettings = JsonConvert.DeserializeObject(System.IO.File.ReadAllText("appsettings.json"));
+            this.watchDir = jsonSettings.watch_directory;
+            this.watchFile = jsonSettings.watch_filename;
+            this.output = jsonSettings.output;
+            this.delimiter = jsonSettings.delimiter;
+
+            this.col_katId = jsonSettings.col_katId is string ? Convert.ToInt32(jsonSettings.col_katId) : jsonSettings.col_katId;
+            this.col_von = jsonSettings.col_von is string ? Convert.ToInt32(jsonSettings.col_von) : jsonSettings.col_von;
+            this.col_bis = jsonSettings.col_bis is string ? Convert.ToInt32(jsonSettings.col_bis) : jsonSettings.col_bis;
+            this.col_refnr = jsonSettings.col_refnr is string ? Convert.ToInt32(jsonSettings.col_refnr) : jsonSettings.col_refnr;
+            this.col_bez = jsonSettings.col_bez is string ? Convert.ToInt32(jsonSettings.col_bez) : jsonSettings.col_bez;
         }
 
         protected override void OnStop()
@@ -120,13 +122,18 @@ namespace KatalogConverter
             try
             {
                 log.Info("Es wurden eine neue Quelldatei (" + e.FullPath + ") erkannt. Starte Konvertierung.");
-                this.sourcefile = e.FullPath;
+                this.setSource(e.FullPath);
                 this.startLazyConvert();
             }
             catch (Exception ex)
             {
                 log.Error("Fehler beim Starten des LazyTimers.", ex);
             }
+        }
+
+        public void setSource(string source)
+        {
+            this.sourcefile = source;
         }
 
         private void OnError(object sender, ErrorEventArgs e) {
@@ -147,11 +154,32 @@ namespace KatalogConverter
             try
             {
                 this.lazyTimer.Stop();
-                this.convert(this.sourcefile, this.delimiter, this.output);
+                this.doWork();
             }
             catch (Exception ex)
             {
                 log.Error("Fehler beim Konvertieren der Daten.", ex);
+            }
+        }
+
+        public void doWork()
+        {
+            FileInfo fileInfo = new FileInfo(this.sourcefile);
+            String txtFile = Path.Combine(fileInfo.Directory.FullName, ROLLOUTTXT);
+            if (File.Exists(txtFile))
+            {
+                string rolloutDate = File.ReadAllText(txtFile, Encoding.UTF8);
+                this.convert(this.sourcefile, this.delimiter, this.output, rolloutDate);
+            }
+            else
+            {
+                this.errStartCount++;
+                if (this.errStartCount > 10)
+                {
+                    log.Error("Abbruch der Konvertierung: Konnte die Rollout TXT Datei nicht finden!");
+                    return;
+                }
+                this.startLazyConvert();
             }
         }
 
@@ -193,14 +221,13 @@ namespace KatalogConverter
             }
         }
 
-        public void convert(string file, string delimiter, Newtonsoft.Json.Linq.JArray outputpaths) //PLXKRDS2, PLXKRDS4
+        public void convert(string file, string delimiter, Newtonsoft.Json.Linq.JArray outputpaths, string rolloutdate) //PLXKRDS2, PLXKRDS4
         {
             Dictionary<int, Katalog> kataloge = new Dictionary<int, Katalog>();
 
             log.Info("Lese Datei: " + file);
             Encoding enc = GetEncoding(file);
-            string aktFileDate = File.GetCreationTime(file).ToString("dd.MM.yyyy");
-
+          
             using (TextFieldParser parser = new TextFieldParser(file, enc))
             {
                 parser.TextFieldType = FieldType.Delimited;
@@ -215,7 +242,7 @@ namespace KatalogConverter
              
                 string aktKatalogID = null;
                
-                log.Info("Lieferdatum: " + aktFileDate );
+                log.Info("Lieferdatum: " + rolloutdate);
 
                 
                 log.Info("Source-Encoding: " + enc.EncodingName);
@@ -237,7 +264,7 @@ namespace KatalogConverter
                     if (aktKatalogID == null || (aktKatalogID != katalogid && kataloge.ContainsKey(Convert.ToInt32(katalogid)) == false))
                     {
                         aktKatalogID = katalogid;
-                        aktKatalog = new Katalog(katalogid, aktFileDate);
+                        aktKatalog = new Katalog(katalogid, rolloutdate);
                         kataloge.Add(Convert.ToInt32(aktKatalogID), aktKatalog);
                     }
                     else
@@ -261,7 +288,7 @@ namespace KatalogConverter
                 
                 foreach (string outputpath in outputpaths)
                 {
-                    string outputlieferung = Path.Combine(outputpath, aktFileDate);
+                    string outputlieferung = Path.Combine(outputpath, rolloutdate);
                     if (!Directory.Exists(outputlieferung))
                     {
                         Directory.CreateDirectory(outputlieferung);

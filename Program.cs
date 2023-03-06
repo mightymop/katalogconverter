@@ -23,7 +23,7 @@ namespace KatalogConverter
             XmlConfigurator.Configure(new FileInfo("log4net.config"));
 
             log.Info(args != null && args.Length > 0 ? "Parameter: " + String.Join(" ", args) : "Keine Parameter erkannt");
-            
+
             if (args == null || args.Length == 0)
             {
                 try
@@ -61,6 +61,7 @@ namespace KatalogConverter
                 log.Info("h | help  = Diese Hilfe anzeigen.");
                 log.Info("*ohne Parameter wird der Dienst ausgeführt.");
             }
+
         }
 
         public static bool IsAdministrator()
