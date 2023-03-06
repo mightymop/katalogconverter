@@ -1,49 +1,65 @@
-﻿using System;
+﻿using log4net;
+using log4net.Config;
+using System;
 using System.Configuration.Install;
+using System.IO;
 using System.Reflection;
 using System.Security.Principal;
 using System.ServiceProcess;
 
 
+
 namespace KatalogConverter
 {
-    internal static class Program
+    class Program
     {
+        private static ILog log = LogManager.GetLogger(typeof(Program));
+
         /// <summary>
         /// Der Haupteinstiegspunkt für die Anwendung.
         /// </summary>
         static void Main(string[] args)
         {
+            XmlConfigurator.Configure(new FileInfo("log4net.config"));
+
+            log.Info(args != null && args.Length > 0 ? "Parameter: " + String.Join(" ", args) : "Keine Parameter erkannt");
+            
             if (args == null || args.Length == 0)
             {
-                Console.WriteLine("Starte Dienst");
-                ServiceBase[] ServicesToRun;
-                ServicesToRun = new ServiceBase[]
+                try
                 {
-                 new KatalogConverter()
-                };
-                ServiceBase.Run(ServicesToRun);
+                    log.Info("Starte Dienst");
+                    ServiceBase[] ServicesToRun;
+                    ServicesToRun = new ServiceBase[]
+                    {
+                        new KatalogConverter()
+                    };
+                    ServiceBase.Run(ServicesToRun);
+                }
+                catch (Exception ex) {
+                    log.Error("Dienst konnte nicht gestartet werden: "+ex.Message);
+                }
             }
             else
             if (args.Length == 1 && (args[0]=="i" || args[0]=="install")&& IsAdministrator())
             {
-                Console.WriteLine("Installiere Dienst");
+                log.Info("Installiere Dienst");
                 ManagedInstallerClass.InstallHelper(new string[] { Assembly.GetExecutingAssembly().Location });
             }
             else
             if (args.Length == 1 && (args[0] == "r" || args[0] == "remove") && IsAdministrator())
             {
-                Console.WriteLine("Entferne Dienst");
+                log.Info("Entferne Dienst");
                 ManagedInstallerClass.InstallHelper(new string[] { "/u", Assembly.GetExecutingAssembly().Location });
             }
             else
             {
-                Console.WriteLine("Usage:");
-                Console.WriteLine("PROGRAMM [i|r|help]");
-                Console.WriteLine("i | install = Dienst installieren");
-                Console.WriteLine("r | remove = Dienst entfernen");
-                Console.WriteLine("h | help  = Diese Hilfe anzeigen.");
-                Console.WriteLine("*ohne Parameter wird der Dienst ausgeführt.");
+                log.Info("Usage:");
+                log.Info("PROGRAMM [i|r|help]");
+                log.Info("i | install = Dienst installieren");
+                log.Info("r | remove = Dienst entfernen");
+                log.Info("h | help  = Diese Hilfe anzeigen.");
+                log.Info("*ohne Parameter wird der Dienst ausgeführt.");
             }
         }
 

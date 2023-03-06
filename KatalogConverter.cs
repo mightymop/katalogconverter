@@ -25,7 +25,7 @@ namespace KatalogConverter
         private ILog log = LogManager.GetLogger(typeof(KatalogConverter));
         private string watchDir;
         private string watchFile;
-        private string output;
+        private string[] output;
         private string delimiter;
 
         private int col_katId;
@@ -190,7 +190,7 @@ namespace KatalogConverter
             }
         }
 
-        public void convert(string file, string delimiter, string outputpath) //PLXKRDS2, PLXKRDS4
+        public void convert(string file, string delimiter, string[] outputpaths) //PLXKRDS2, PLXKRDS4
         {
             Dictionary<int, Katalog> kataloge = new Dictionary<int, Katalog>();
 
@@ -254,17 +254,22 @@ namespace KatalogConverter
                 var list = kataloge.Keys.ToList();
                 list.Sort();
 
-
-                string outputlieferung = Path.Combine(outputpath, aktFileDate);
-                Directory.CreateDirectory(outputlieferung);
                 log.Info("Anzahl Kataloge: " + Convert.ToString(kataloge.Count));
 
-
-                foreach (int key in list)
+                foreach (string outputpath in outputpaths)
                 {
-                    log.Debug("Schreibe Datei: "+ Convert.ToString(key) + ".json");
-                    
-                    File.WriteAllText(Path.Combine(outputlieferung, Convert.ToString(key) + ".json"), kataloge[key].ToString(),Encoding.UTF8);
+                    string outputlieferung = Path.Combine(outputpath, aktFileDate);
+                    if (!Directory.Exists(outputlieferung))
+                    {
+                        Directory.CreateDirectory(outputlieferung);
+                    }
+
+                    foreach (int key in list)
+                    {
+                        log.Debug("Schreibe Datei: " + Convert.ToString(key) + ".json");
+
+                        File.WriteAllText(Path.Combine(outputlieferung, Convert.ToString(key) + ".json"), kataloge[key].ToString(), Encoding.UTF8);
+                    }
                 }
             }
             log.Info("Fertig.");
