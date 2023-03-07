@@ -21,6 +21,7 @@ namespace KatalogConverter
         static void Main(string[] args)
         {
             XmlConfigurator.Configure(new FileInfo("log4net.config"));
+            string test = "C:\\KatalogDienst\\TEST\\1\\rolloutDate.txt.txt".Replace(".txt.txt", ".txt");
 
             log.Info(args != null && args.Length > 0 ? "Parameter: " + String.Join(" ", args) : "Keine Parameter erkannt");
 

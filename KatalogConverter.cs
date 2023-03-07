@@ -19,7 +19,8 @@ namespace KatalogConverter
         private ILog log = LogManager.GetLogger(typeof(KatalogConverter));
         private string watchDir;
         private string watchFile;
-        private string watchParentDir;
+        private string convertFile;
+        private string convertParentDir;
         private Newtonsoft.Json.Linq.JArray output;
         private string delimiter;
 
@@ -29,12 +30,10 @@ namespace KatalogConverter
         private int col_refnr;
         private int col_bez;
 
-        private int errStartCount = 0;
-
         private string sourcefile;
+        private string rolloutFile;
         private Timer lazyTimer;
-
-        private static string ROLLOUTTXT = "rolloutDate.txt";
+        private Timer lazyTimerInit;
 
         public KatalogConverter()
         {
@@ -48,11 +47,12 @@ namespace KatalogConverter
             {
                 this.init();
                 this.watch(this.watchDir);
-                log.Info("Dienst überwacht Verzeichnis: "+this.watchDir);
+                log.Info("Dienst überwacht Verzeichnis: " + this.watchDir);
             }
-            catch (Exception e)
+            catch (Exception err)
             {
-                log.Error("Fehler beim Start des Dienstes.",e);
+                log.Error("Fehler beim Start des Dienstes.", err);
+                startLazyInit();
             }
         }
 
@@ -67,7 +67,9 @@ namespace KatalogConverter
             dynamic jsonSettings = JsonConvert.DeserializeObject(System.IO.File.ReadAllText("appsettings.json"));
             this.watchDir = jsonSettings.watch_directory;
             this.watchFile = jsonSettings.watch_filename;
-            this.watchParentDir = jsonSettings.watch_parentdir;
+            this.convertParentDir = jsonSettings.convert_parentdir;
+            this.convertFile = jsonSettings.convert_filename;
+
             this.output = jsonSettings.output;
             this.delimiter = jsonSettings.delimiter;
 
@@ -87,9 +89,11 @@ namespace KatalogConverter
                 {
                     this.watcher.Dispose();
                 }
+                this.watcher = null;
             }
             catch (Exception e)
             {
+                this.watcher = null;
                 log.Error("Fehler beim Start des Dienstes.", e);
             }
         }
@@ -113,6 +117,7 @@ namespace KatalogConverter
             //watcher.Renamed += OnRenamed;
             this.watcher.Error += OnError;
 
+            log.Info("Watch for File with Filter: " + watchFile);
             this.watcher.Filter = watchFile; //"*.txt";
             this.watcher.IncludeSubdirectories = true;
             this.watcher.EnableRaisingEvents = true;
@@ -123,18 +128,41 @@ namespace KatalogConverter
         {
             try
             {
-                FileInfo fi = new FileInfo(e.FullPath);
-                if (fi.DirectoryName.ToLower().Equals(this.watchParentDir.ToLower()))
+               
+                FileInfo frolloutDate = new FileInfo(e.FullPath);
+                log.Debug("OnCreated: "+ e.FullPath);
+
+                string parentDir = Path.Combine(frolloutDate.Directory.FullName, this.convertParentDir);
+                string convertFile = Path.Combine(parentDir, this.convertFile);
+
+                FileInfo fConvertFile = new FileInfo(convertFile);
+
+                log.Debug("fConvertFile: " + fConvertFile.FullName);
+                log.Debug("parentDir: " + parentDir);
+
+                if (fConvertFile.Exists && frolloutDate.Exists)
                 {
-                    log.Info("Es wurden eine neue Quelldatei (" + e.FullPath + ") erkannt. Starte Konvertierung.");
-                    this.setSource(e.FullPath);
+                    log.Info("Es wurden eine neue Quelldatei (" + fConvertFile.FullName + ") erkannt. Starte Konvertierung.");
+                    this.setSource(fConvertFile.FullName);
+                    this.setRolloutFile(frolloutDate.FullName);
                     this.startLazyConvert();
+                }
+                else
+                {
+                    log.Error("Konvertierungsvorraussetzungen nicht erfüllt.");
+                    log.Error("fConvertFile: " + fConvertFile.Exists);
+                    log.Error("frolloutDate: " + frolloutDate.Exists);
                 }
             }
             catch (Exception ex)
             {
                 log.Error("Fehler beim Starten des LazyTimers.", ex);
             }
+        }
+
+        public void setRolloutFile(string rollout)
+        {
+            this.rolloutFile = rollout;
         }
 
         public void setSource(string source)
@@ -144,6 +172,44 @@ namespace KatalogConverter
 
         private void OnError(object sender, ErrorEventArgs e) {
             log.Error("Fehler beim Erkennen auf Veränderungen im Dateisystem:",e.GetException());
+            if (this.watcher != null)
+            {
+                this.watcher.Dispose();
+            }
+            this.watcher = null;
+            this.startLazyInit();
+        }
+
+        private void startLazyInit()
+        {
+            this.lazyTimerInit = new Timer();
+            this.lazyTimerInit.Elapsed += new ElapsedEventHandler(OnTimedInitEvent);
+            this.lazyTimerInit.Interval = 1000*60*10;
+            log.Info("Starte Init Timer...");
+            this.lazyTimerInit.Start();
+        }
+
+        private void OnTimedInitEvent(object source, ElapsedEventArgs e)
+        {
+            this.lazyTimerInit.Stop();
+            this.lazyTimerInit = null;
+            log.Info("Dienst wird gestartet.");
+            try
+            {
+                this.init();
+                this.watch(this.watchDir);
+                log.Info("Dienst überwacht Verzeichnis: " + this.watchDir);
+            }
+            catch (Exception err)
+            {
+                log.Error("Fehler beim Start des Dienstes.", err);
+                if (this.watcher != null)
+                {
+                    this.watcher.Dispose();
+                }
+                this.watcher = null;
+                startLazyInit();
+            }
         }
 
         private void startLazyConvert()
@@ -170,22 +236,14 @@ namespace KatalogConverter
 
         public void doWork()
         {
-            FileInfo fileInfo = new FileInfo(this.sourcefile);
-            String txtFile = Path.Combine(fileInfo.Directory.Parent.FullName, ROLLOUTTXT);
-            if (File.Exists(txtFile))
+            if (File.Exists(this.rolloutFile))
             {
-                string rolloutDate = File.ReadAllText(txtFile, Encoding.UTF8);
+                string rolloutDate = File.ReadAllText(this.rolloutFile, Encoding.UTF8);
                 this.convert(this.sourcefile, this.delimiter, this.output, rolloutDate);
             }
             else
             {
-                this.errStartCount++;
-                if (this.errStartCount > 10)
-                {
-                    log.Error("Abbruch der Konvertierung: Konnte die Rollout TXT Datei nicht finden!");
-                    return;
-                }
-                this.startLazyConvert();
+                log.Warn("Rolloutdatei wurde vor Beginn der Konvertierung gelöscht. Vorgang abgebrochen.");
             }
         }
 
@@ -302,9 +360,10 @@ namespace KatalogConverter
 
                     foreach (int key in list)
                     {
-                        log.Debug("Schreibe Datei: " + Convert.ToString(key) + ".json");
+                        string fullpath = Path.Combine(outputlieferung, Convert.ToString(key) + ".json");
+                        log.Debug("Schreibe Datei: " + fullpath);
 
-                        File.WriteAllText(Path.Combine(outputlieferung, Convert.ToString(key) + ".json"), kataloge[key].ToString(), Encoding.UTF8);
+                        File.WriteAllText(fullpath, kataloge[key].ToString(), Encoding.UTF8);
                     }
                 }
             }
