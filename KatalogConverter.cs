@@ -19,6 +19,7 @@ namespace KatalogConverter
         private ILog log = LogManager.GetLogger(typeof(KatalogConverter));
         private string watchDir;
         private string watchFile;
+        private string watchParentDir;
         private Newtonsoft.Json.Linq.JArray output;
         private string delimiter;
 
@@ -33,7 +34,7 @@ namespace KatalogConverter
         private string sourcefile;
         private Timer lazyTimer;
 
-        private static string ROLLOUTTXT = "rollout.txt";
+        private static string ROLLOUTTXT = "rolloutDate.txt";
 
         public KatalogConverter()
         {
@@ -66,6 +67,7 @@ namespace KatalogConverter
             dynamic jsonSettings = JsonConvert.DeserializeObject(System.IO.File.ReadAllText("appsettings.json"));
             this.watchDir = jsonSettings.watch_directory;
             this.watchFile = jsonSettings.watch_filename;
+            this.watchParentDir = jsonSettings.watch_parentdir;
             this.output = jsonSettings.output;
             this.delimiter = jsonSettings.delimiter;
 
@@ -121,9 +123,13 @@ namespace KatalogConverter
         {
             try
             {
-                log.Info("Es wurden eine neue Quelldatei (" + e.FullPath + ") erkannt. Starte Konvertierung.");
-                this.setSource(e.FullPath);
-                this.startLazyConvert();
+                FileInfo fi = new FileInfo(e.FullPath);
+                if (fi.DirectoryName.ToLower().Equals(this.watchParentDir.ToLower()))
+                {
+                    log.Info("Es wurden eine neue Quelldatei (" + e.FullPath + ") erkannt. Starte Konvertierung.");
+                    this.setSource(e.FullPath);
+                    this.startLazyConvert();
+                }
             }
             catch (Exception ex)
             {
@@ -165,7 +171,7 @@ namespace KatalogConverter
         public void doWork()
         {
             FileInfo fileInfo = new FileInfo(this.sourcefile);
-            String txtFile = Path.Combine(fileInfo.Directory.FullName, ROLLOUTTXT);
+            String txtFile = Path.Combine(fileInfo.Directory.Parent.FullName, ROLLOUTTXT);
             if (File.Exists(txtFile))
             {
                 string rolloutDate = File.ReadAllText(txtFile, Encoding.UTF8);
