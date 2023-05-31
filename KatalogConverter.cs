@@ -46,6 +46,26 @@ namespace KatalogConverter
             try
             {
                 this.init();
+                
+            }
+            catch (Exception err)
+            {
+                log.Error("Fehler beim Initialisieren des Dienstes.", err);
+                startLazyInit();
+            }
+
+          /*  try
+            {
+                this.testOutput();
+
+            }
+            catch (Exception err)
+            {
+                log.Error("Fehler beim Test des Outputs", err);
+                startLazyInit();
+            }*/
+            
+            try { 
                 this.watch(this.watchDir);
                 log.Info("Dienst überwacht Verzeichnis: " + this.watchDir);
             }
@@ -55,6 +75,23 @@ namespace KatalogConverter
                 startLazyInit();
             }
         }
+
+     /*   private void testOutput()
+        {
+            foreach (string outputpath in this.output)
+            {
+                string outputlieferung = Path.Combine(outputpath, "test");
+                if (!Directory.Exists(outputlieferung))
+                {
+                    Directory.CreateDirectory(outputlieferung);
+                }
+
+                string fullpath = Path.Combine(outputlieferung, "test.json");
+                log.Debug("Schreibe Datei: " + fullpath);
+
+                File.WriteAllText(fullpath, "{ \"Test\": \""+DateTime.Now.ToLocalTime()+"\"}", Encoding.UTF8);
+            }
+        }*/
 
         public void init()
         {
@@ -94,14 +131,19 @@ namespace KatalogConverter
             catch (Exception e)
             {
                 this.watcher = null;
-                log.Error("Fehler beim Start des Dienstes.", e);
+                log.Error("Fehler beim Stoppen des Dienstes.", e);
             }
         }
 
         private void watch(string path)
         {
-            this.watcher = new FileSystemWatcher(path);
+            log.Debug("Initialisiere FileSystemWatcher Objekt");
+            this.watcher = new FileSystemWatcher();
 
+            log.Debug("Setze Pfad: "+path);
+            this.watcher.Path = path;
+
+            log.Debug("setze Filter");
             this.watcher.NotifyFilter = NotifyFilters.Attributes
                                  | NotifyFilters.CreationTime
                                  | NotifyFilters.DirectoryName
@@ -111,17 +153,28 @@ namespace KatalogConverter
                                  | NotifyFilters.Security
                                  | NotifyFilters.Size;
 
+            log.Debug("setze onCreate Event");
             // watcher.Changed += OnChanged;
             this.watcher.Created += OnCreated;
             // watcher.Deleted += OnDeleted;
             //watcher.Renamed += OnRenamed;
+
+            log.Debug("setze onError Event");
             this.watcher.Error += OnError;
 
-            log.Info("Watch for File with Filter: " + watchFile);
+            log.Debug("Watch for File with Filter: " + watchFile);
             this.watcher.Filter = watchFile; //"*.txt";
+
+            log.Debug("Watch for subdirs");
             this.watcher.IncludeSubdirectories = true;
+
+            log.Debug("Enable raising events");
             this.watcher.EnableRaisingEvents = true;
+
+            log.Debug("set Buffsize");
             this.watcher.InternalBufferSize *= 8;
+
+            log.Debug("Initialisierung abgeschlossen");
         }
 
         private void OnCreated(object sender, FileSystemEventArgs e)
