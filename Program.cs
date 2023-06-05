@@ -61,6 +61,8 @@ namespace KatalogConverter
                 log.Info("r | remove = Dienst entfernen");
                 log.Info("h | help  = Diese Hilfe anzeigen.");
                 log.Info("*ohne Parameter wird der Dienst ausgeführt.");
+                log.Info("*nicht vergessen, den User für \"Login as a service\" zu berechtigen!!!");
+                log.Info("> https://learn.microsoft.com/de-de/troubleshoot/windows-server/system-management-components/service-startup-permissions");
             }
 
         }
