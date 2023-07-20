@@ -10,7 +10,6 @@ using System.Linq;
 using System.ServiceProcess;
 using System.Text;
 using System.Timers;
-using System.Web.UI.WebControls;
 
 namespace KatalogConverter
 {
@@ -24,6 +23,7 @@ namespace KatalogConverter
         private string convertParentDir;
         private Newtonsoft.Json.Linq.JArray output;
         private string delimiter;
+        private bool check_filecontent;
 
         private int col_katId;
         private int col_von;
@@ -47,7 +47,6 @@ namespace KatalogConverter
             try
             {
                 this.init();
-                
             }
             catch (Exception err)
             {
@@ -72,18 +71,41 @@ namespace KatalogConverter
 
                 RolloutDateSearcher searcher = new RolloutDateSearcher();
                                 
-                log.Info("Dienst sucht nach aktueller rolloutDate.txt Datei.");
+               
                 string latestDate = "";
                 string latestDir = "";
-                searcher.SearchLatestRolloutDate(this.watchDir, out latestDate, out latestDir);
+                string lDate = null;
+                try
+                {
+                    log.Info("Dienst sucht nach aktueller rolloutDate.txt Datei.");
+                    lDate = File.ReadAllText("latest.txt").Trim();
+                    log.Info("Datum: "+lDate);
+                }
+                catch (Exception ex)
+                {
+                    log.Error("Fehler beim Lesen der Datei: " + ex.Message);
+                }
 
-                if (!string.IsNullOrEmpty(latestDate))
+                searcher.SearchLatestRolloutDate(this.watchDir, this.check_filecontent, lDate, out latestDir, out latestDate);
+
+                if (!string.IsNullOrEmpty(latestDir))
                 {
                     log.Info("Neueres Datum gefunden.");
+                
                     string parentDir = Path.Combine(latestDir, this.convertParentDir);
                     string convertFile = Path.Combine(parentDir, this.convertFile);
 
                     this.convert(convertFile, this.delimiter, this.output, latestDate);
+
+                    try
+                    {
+                        File.WriteAllText("latest.txt", latestDate);
+                        log.Debug("Datum wurde erfolgreich in die Datei geschrieben.");
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Warn("Fehler beim Schreiben der Datei: " + ex.Message);
+                    }
                 }
                 else
                 {
@@ -128,6 +150,8 @@ namespace KatalogConverter
             this.watchFile = jsonSettings.watch_filename;
             this.convertParentDir = jsonSettings.convert_parentdir;
             this.convertFile = jsonSettings.convert_filename;
+
+            this.check_filecontent = jsonSettings.check_filecontent;
 
             this.output = jsonSettings.output;
             this.delimiter = jsonSettings.delimiter;

@@ -15,12 +15,14 @@ namespace KatalogConverter
 
         private string filename = "rolloutDate.txt";
         private string latestDate;
+        private bool check_filecontent;
 
-        public void SearchLatestRolloutDate(string rootDirectory, out string dir, out string date)
+        public void SearchLatestRolloutDate(string rootDirectory, bool check_filecontent, string lDate, out string dir, out string date)
         {
             dir = null;
             date = null;
-
+            latestDate = lDate != null ? lDate : null;
+            this.check_filecontent = check_filecontent;
             if (!Directory.Exists(rootDirectory))
             {
                 log.Error("Das angegebene Verzeichnis existiert nicht.");
@@ -70,15 +72,23 @@ namespace KatalogConverter
 
         public string ReadRolloutDateFromFile(string filePath)
         {
-            try
+            if (check_filecontent)
             {
-                return File.ReadAllText(filePath).Trim();
+                try
+                {
+                    return File.ReadAllText(filePath).Trim();
+                }
+                catch (Exception ex)
+                {
+                    // Handle any exceptions here (e.g., file not found, etc.)
+                    log.Error("Fehler beim Lesen der Datei: " + ex.Message);
+                    return null;
+                }
             }
-            catch (Exception ex)
+            else
             {
-                // Handle any exceptions here (e.g., file not found, etc.)
-                log.Error("Fehler beim Lesen der Datei: " + ex.Message);
-                return null;
+                FileInfo rolloutFileInfo = new FileInfo(filePath);
+                return rolloutFileInfo.CreationTime.ToString("dd.MM.yyyy");
             }
         }
 
