@@ -21,7 +21,7 @@ namespace KatalogConverter
         static void Main(string[] args)
         {
             XmlConfigurator.Configure(new FileInfo("log4net.config"));
-            string test = "C:\\KatalogDienst\\TEST\\1\\rolloutDate.txt.txt".Replace(".txt.txt", ".txt");
+           // string test = "C:\\KatalogDienst\\TEST\\1\\rolloutDate.txt.txt".Replace(".txt.txt", ".txt");
 
             log.Info(args != null && args.Length > 0 ? "Parameter: " + String.Join(" ", args) : "Keine Parameter erkannt");
 
@@ -62,7 +62,7 @@ namespace KatalogConverter
                 log.Info("h | help  = Diese Hilfe anzeigen.");
                 log.Info("*ohne Parameter wird der Dienst ausgeführt.");
                 log.Info("*nicht vergessen, den User für \"Login as a service\" zu berechtigen!!!");
-                log.Info("> https://learn.microsoft.com/de-de/troubleshoot/windows-server/system-management-components/service-startup-permissions");
+                log.Info("> https://learn.microsoft.com/de-de/troubleshoot/windows-server/system-management-components/service-startup-permissionss");
             }
 
         }

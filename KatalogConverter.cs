@@ -10,6 +10,7 @@ using System.Linq;
 using System.ServiceProcess;
 using System.Text;
 using System.Timers;
+using System.Web.UI.WebControls;
 
 namespace KatalogConverter
 {
@@ -68,6 +69,27 @@ namespace KatalogConverter
             try { 
                 this.watch(this.watchDir);
                 log.Info("Dienst überwacht Verzeichnis: " + this.watchDir);
+
+                RolloutDateSearcher searcher = new RolloutDateSearcher();
+                                
+                log.Info("Dienst sucht nach aktueller rolloutDate.txt Datei.");
+                string latestDate = "";
+                string latestDir = "";
+                searcher.SearchLatestRolloutDate(this.watchDir, out latestDate, out latestDir);
+
+                if (!string.IsNullOrEmpty(latestDate))
+                {
+                    log.Info("Neueres Datum gefunden.");
+                    string parentDir = Path.Combine(latestDir, this.convertParentDir);
+                    string convertFile = Path.Combine(parentDir, this.convertFile);
+
+                    this.convert(convertFile, this.delimiter, this.output, latestDate);
+                }
+                else
+                {
+                    log.Info("Kein neueres Datum gefunden.");
+                }
+                
             }
             catch (Exception err)
             {
@@ -292,6 +314,15 @@ namespace KatalogConverter
             if (File.Exists(this.rolloutFile))
             {
                 string rolloutDate = File.ReadAllText(this.rolloutFile, Encoding.UTF8);
+                try
+                {
+                    File.WriteAllText("latest.txt", rolloutDate);
+                    log.Debug("Datum wurde erfolgreich in die Datei geschrieben.");
+                }
+                catch (Exception ex)
+                {
+                    log.Warn("Fehler beim Schreiben der Datei: " + ex.Message);
+                }
                 this.convert(this.sourcefile, this.delimiter, this.output, rolloutDate);
             }
             else
