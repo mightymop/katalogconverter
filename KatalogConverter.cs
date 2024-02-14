@@ -447,26 +447,41 @@ namespace KatalogConverter
         {            
             Dictionary<string,string> name_id = new Dictionary<string,string>();
             Dictionary<string, string> id_name= new Dictionary<string, string>();
+            Dictionary<string, string> name_orig = new Dictionary<string, string>();
 
-            foreach(var kvp in dictionary)
+            foreach (var kvp in dictionary)
             {
-                if (!name_id.ContainsKey(kvp.Key))
+                if (!id_name.ContainsKey(kvp.Key))
                 {
-                    name_id.Add(kvp.Key, kvp.Value);
+                    try 
+                    { 
+                        id_name.Add(kvp.Key, Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper());
+                    }
+                    catch (Exception e)
+                    {
+                        log.Error($"{kvp.Key} - {Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper()} (key) nicht hinzugefügt: "+e.Message);
+                    }
                 }
                 else
                 {
-                    log.Error($"{kvp.Key} - {kvp.Value} (key) bereits vorhanden!");
+                    log.Error($"{kvp.Key} - {Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper()} (key) bereits vorhanden!");
                 }
 
-                if (!id_name.ContainsKey(kvp.Value))
+                if (!name_id.ContainsKey(Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper()))
                 {
-                    id_name.Add(kvp.Value, kvp.Key);
+                    try
+                    {
+                        name_id.Add(Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper(), kvp.Key);
+                    }
+                    catch (Exception e)
+                    {
+                        log.Error($"{Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper()} - {kvp.Key} (value) nicht hinzugefügt: " + e.Message);
+                    }
                 }
                 else
                 {
-                    log.Error($"{kvp.Value} - {kvp.Key} (value) bereits vorhanden!");
-                }
+                    log.Error($"{Katalog.ConvertSpecialCharacters(kvp.Value).ToUpper()} - {kvp.Key} (value) bereits vorhanden!");
+                }                
             }
 
             var jsonData = new

@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace KatalogConverter.Model
 {
@@ -61,7 +62,7 @@ namespace KatalogConverter.Model
         {
             this.katalogid = katalogId;
             this.lieferung = lieferung;
-            this.katalogname = ConvertSpecialCharacters(katalogName);
+            this.katalogname = ConvertSpecialCharacters(katalogName).ToUpper();
             katalog = new List<KatalogItem>();
         }
 
@@ -77,18 +78,20 @@ namespace KatalogConverter.Model
 
         public static string ConvertSpecialCharacters(string inputString)
         {
-            string convertedString = inputString
-                .Replace("ä", "ae")
-                .Replace("ö", "oe")
-                .Replace("ü", "ue")
-                .Replace("Ä", "Ae")
-                .Replace("Ö", "Oe")
-                .Replace("Ü", "Ue")
-                .Replace("ß", "ss")
-                .Replace("KAT_KAT_", "KAT_")
-                .Replace("-", "_");
+            string convertedString = Regex.Replace(inputString, "[Ä]", "Ae");
+            convertedString = Regex.Replace(convertedString, "[ä]", "ae");
+            convertedString = Regex.Replace(convertedString, "[Ö]", "Oe");
+            convertedString = Regex.Replace(convertedString, "[ö]", "oe");
+            convertedString = Regex.Replace(convertedString, "[Ü]", "Ue");
+            convertedString = Regex.Replace(convertedString, "[ü]", "ue");
+            convertedString = Regex.Replace(convertedString, "[ß]", "ss");
+            convertedString = Regex.Replace(convertedString, "[-]", "_");
+            convertedString = Regex.Replace(convertedString, @"\s+", "");
 
-            return convertedString.ToUpper();
+            string pattern = @"[^a-zA-Z_]";
+            convertedString = Regex.Replace(convertedString, pattern, "");
+
+            return convertedString;
         }
 
         public override string ToString()
@@ -102,3 +105,4 @@ namespace KatalogConverter.Model
         }
     }
 }
+
