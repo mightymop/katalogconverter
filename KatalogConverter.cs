@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.ServiceProcess;
 using System.Text;
+using System.Threading;
 using System.Timers;
 
 namespace KatalogConverter
@@ -20,6 +21,8 @@ namespace KatalogConverter
         private string watchDir;
         private string watchFile;
         private string convertFile;
+        private string convert_katdic;
+        private string convert_versionfile;
         private string convertParentDir;
         private Newtonsoft.Json.Linq.JArray output;
         private string delimiter;
@@ -31,14 +34,44 @@ namespace KatalogConverter
         private int col_refnr;
         private int col_bez;
 
+        private int col_katdic_katId;
+        private int col_katdic_katName;
+
+        private int col_katversion;
+        private int col_katdate;
+
         private string sourcefile;
+        private string sourceKatDic;
+        private string sourceVersionfile;
         private string rolloutFile;
-        private Timer lazyTimer;
-        private Timer lazyTimerInit;
+        private System.Timers.Timer lazyTimer;
+        private System.Timers.Timer lazyTimerInit;
+
+        private System.Threading.Timer restartTimer;
 
         public KatalogConverter()
         {
             InitializeComponent();
+        }
+
+        private void StartRestartTimer()
+        {
+            // Timer erstellen, der alle 18 Stunden ausgelöst wird (18 Stunden * 60 Minuten * 60 Sekunden * 1000 Millisekunden)
+            restartTimer = new System.Threading.Timer(RestartService, null, TimeSpan.FromHours(18), Timeout.InfiniteTimeSpan);
+        }
+
+        private void StopRestartTimer()
+        {
+            // Timer stoppen
+            restartTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+            restartTimer?.Dispose();
+        }
+
+        private void RestartService(object state)
+        {
+            log.Info("Dienst wird neu gestartet.");
+            OnStop();
+            OnStart(null);
         }
 
         protected override void OnStart(string[] args)
@@ -46,6 +79,7 @@ namespace KatalogConverter
             log.Info("Dienst wird gestartet.");
             try
             {
+               
                 this.init();
             }
             catch (Exception err)
@@ -53,39 +87,37 @@ namespace KatalogConverter
                 log.Error("Fehler beim Initialisieren des Dienstes.", err);
                 startLazyInit();
             }
-
-          /*  try
-            {
-                this.testOutput();
-
-            }
-            catch (Exception err)
-            {
-                log.Error("Fehler beim Test des Outputs", err);
-                startLazyInit();
-            }*/
             
             try { 
                 this.watch(this.watchDir);
                 log.Info("Dienst überwacht Verzeichnis: " + this.watchDir);
 
                 RolloutDateSearcher searcher = new RolloutDateSearcher();
-                                
-               
+                   
                 string latestDate = "";
                 string latestDir = "";
                 string lDate = null;
+
+
                 try
                 {
-                    log.Info("Dienst sucht nach aktueller rolloutDate.txt Datei.");
-                    lDate = File.ReadAllText("latest.txt").Trim();
-                    log.Info("Datum: "+lDate);
+                    // StreamReader instanziieren
+                    using (StreamReader reader = new StreamReader("latest.txt"))
+                    {
+                        // Dateiinhalt lesen und etwas damit machen
+                        log.Info("Dienst sucht nach aktueller rolloutDate.txt Datei.");
+                        string inhalt = reader.ReadToEnd();
+                        lDate = inhalt;
+                        log.Info("Datum: " + lDate);
+                        reader.Close();
+                    }
                 }
                 catch (Exception ex)
                 {
+                    // Fehlerbehandlung, falls etwas schief geht
                     log.Error("Fehler beim Lesen der Datei: " + ex.Message);
                 }
-
+               
                 searcher.SearchLatestRolloutDate(this.watchDir, this.check_filecontent, lDate, out latestDir, out latestDate);
 
                 if (!string.IsNullOrEmpty(latestDir))
@@ -94,8 +126,10 @@ namespace KatalogConverter
                 
                     string parentDir = Path.Combine(latestDir, this.convertParentDir);
                     string convertFile = Path.Combine(parentDir, this.convertFile);
+                    string convert_katdic = Path.Combine(parentDir, this.convert_katdic);
+                    string convert_versionfile = Path.Combine(parentDir, this.convert_versionfile);
 
-                    this.convert(convertFile, this.delimiter, this.output, latestDate);
+                    this.convert(convertFile, convert_katdic, convert_versionfile, this.delimiter, this.output, latestDate);
 
                     try
                     {
@@ -120,25 +154,11 @@ namespace KatalogConverter
             }
         }
 
-     /*   private void testOutput()
-        {
-            foreach (string outputpath in this.output)
-            {
-                string outputlieferung = Path.Combine(outputpath, "test");
-                if (!Directory.Exists(outputlieferung))
-                {
-                    Directory.CreateDirectory(outputlieferung);
-                }
-
-                string fullpath = Path.Combine(outputlieferung, "test.json");
-                log.Debug("Schreibe Datei: " + fullpath);
-
-                File.WriteAllText(fullpath, "{ \"Test\": \""+DateTime.Now.ToLocalTime()+"\"}", Encoding.UTF8);
-            }
-        }*/
 
         public void init()
         {
+            StartRestartTimer();
+
             string location = AppDomain.CurrentDomain.BaseDirectory;//System.Reflection.Assembly.GetEntryAssembly().Location;
             string workdir = location.EndsWith(".exe") ? location.Substring(0, location.LastIndexOf(Path.PathSeparator)) : location;
             Directory.SetCurrentDirectory(workdir);
@@ -150,6 +170,8 @@ namespace KatalogConverter
             this.watchFile = jsonSettings.watch_filename;
             this.convertParentDir = jsonSettings.convert_parentdir;
             this.convertFile = jsonSettings.convert_filename;
+            this.convert_katdic = jsonSettings.convert_katdic;
+            this.convert_versionfile = jsonSettings.convert_versionfile;
 
             this.check_filecontent = jsonSettings.check_filecontent;
 
@@ -161,6 +183,12 @@ namespace KatalogConverter
             this.col_bis = jsonSettings.col_bis is string ? Convert.ToInt32(jsonSettings.col_bis) : jsonSettings.col_bis;
             this.col_refnr = jsonSettings.col_refnr is string ? Convert.ToInt32(jsonSettings.col_refnr) : jsonSettings.col_refnr;
             this.col_bez = jsonSettings.col_bez is string ? Convert.ToInt32(jsonSettings.col_bez) : jsonSettings.col_bez;
+
+            col_katdic_katId = jsonSettings.col_katdic_katId is string ? Convert.ToInt32(jsonSettings.col_katdic_katId) : jsonSettings.col_katdic_katId;
+            col_katdic_katName = jsonSettings.col_katdic_katName is string ? Convert.ToInt32(jsonSettings.col_katdic_katName) : jsonSettings.col_katdic_katName;
+
+            col_katversion = jsonSettings.col_katversion is string ? Convert.ToInt32(jsonSettings.col_katversion) : jsonSettings.col_katversion;
+            col_katdate = jsonSettings.col_katdate is string ? Convert.ToInt32(jsonSettings.col_katdate) : jsonSettings.col_katdate;
         }
 
         protected override void OnStop()
@@ -168,6 +196,9 @@ namespace KatalogConverter
             try
             {
                 log.Info("Dienst wird beendet.");
+
+                StopRestartTimer();
+
                 if (this.watcher != null)
                 {
                     this.watcher.Dispose();
@@ -243,6 +274,11 @@ namespace KatalogConverter
                 {
                     log.Info("Es wurden eine neue Quelldatei (" + fConvertFile.FullName + ") erkannt. Starte Konvertierung.");
                     this.setSource(fConvertFile.FullName);
+                    string directoryPath = fConvertFile.Directory.FullName;                    
+                    string newFilePathKatdic = Path.Combine(directoryPath, this.convert_katdic);
+                    string newFilePathVersion = Path.Combine(directoryPath, this.convert_versionfile);
+                    this.setKatDic(newFilePathKatdic);
+                    this.setVersionFile(newFilePathVersion);
                     this.setRolloutFile(frolloutDate.FullName);
                     this.startLazyConvert();
                 }
@@ -269,6 +305,16 @@ namespace KatalogConverter
             this.sourcefile = source;
         }
 
+        public void setKatDic(string katDic)
+        {
+            this.sourceKatDic= katDic;
+        }
+
+        public void setVersionFile(string versionFile)
+        {
+            this.sourceVersionfile = versionFile;
+        }
+
         private void OnError(object sender, ErrorEventArgs e) {
             log.Error("Fehler beim Erkennen auf Veränderungen im Dateisystem:",e.GetException());
             if (this.watcher != null)
@@ -281,7 +327,7 @@ namespace KatalogConverter
 
         private void startLazyInit()
         {
-            this.lazyTimerInit = new Timer();
+            this.lazyTimerInit = new System.Timers.Timer();
             this.lazyTimerInit.Elapsed += new ElapsedEventHandler(OnTimedInitEvent);
             this.lazyTimerInit.Interval = 1000*60*10;
             log.Info("Starte Init Timer...");
@@ -313,7 +359,7 @@ namespace KatalogConverter
 
         private void startLazyConvert()
         {
-            this.lazyTimer = new Timer();
+            this.lazyTimer = new System.Timers.Timer();
             this.lazyTimer.Elapsed += new ElapsedEventHandler(OnTimedEvent);
             this.lazyTimer.Interval = 30000;
             log.Info("Beginne Datenkonvertierung in 30Sek.");
@@ -338,8 +384,11 @@ namespace KatalogConverter
             if (File.Exists(this.rolloutFile))
             {
                 string rolloutDate = File.ReadAllText(this.rolloutFile, Encoding.UTF8);
+               
+                this.convert(this.sourcefile,this.sourceKatDic,this.sourceVersionfile,this.delimiter, this.output, rolloutDate);
                 try
                 {
+                    File.Delete("latest.txt");
                     File.WriteAllText("latest.txt", rolloutDate);
                     log.Debug("Datum wurde erfolgreich in die Datei geschrieben.");
                 }
@@ -347,7 +396,6 @@ namespace KatalogConverter
                 {
                     log.Warn("Fehler beim Schreiben der Datei: " + ex.Message);
                 }
-                this.convert(this.sourcefile, this.delimiter, this.output, rolloutDate);
             }
             else
             {
@@ -389,14 +437,106 @@ namespace KatalogConverter
                 if (reader.Peek() >= 0) // you need this!
                     reader.Read();
 
-                return reader.CurrentEncoding;
+                Encoding result = reader.CurrentEncoding;
+                reader.Close();
+                return result;
             }
         }
 
-        public void convert(string file, string delimiter, Newtonsoft.Json.Linq.JArray outputpaths, string rolloutdate) //PLXKRDS2, PLXKRDS4
-        {
-            Dictionary<int, Katalog> kataloge = new Dictionary<int, Katalog>();
+        public void writeKatInfofile(Dictionary<string,string> dictionary, string version, string date, string filePath)
+        {            
+            Dictionary<string,string> name_id = new Dictionary<string,string>();
+            Dictionary<string, string> id_name= new Dictionary<string, string>();
 
+            foreach(var kvp in dictionary)
+            {
+                if (!name_id.ContainsKey(kvp.Key))
+                {
+                    name_id.Add(kvp.Key, kvp.Value);
+                }
+                else
+                {
+                    log.Error($"{kvp.Key} - {kvp.Value} (key) bereits vorhanden!");
+                }
+
+                if (!id_name.ContainsKey(kvp.Value))
+                {
+                    id_name.Add(kvp.Value, kvp.Key);
+                }
+                else
+                {
+                    log.Error($"{kvp.Value} - {kvp.Key} (value) bereits vorhanden!");
+                }
+            }
+
+            var jsonData = new
+            {
+                name_id = name_id,
+                id_name = id_name,
+                version = version,
+                date = date
+            };
+
+            // Konvertieren des Objekts in JSON-Format
+            string json = JsonConvert.SerializeObject(jsonData, Formatting.Indented);
+
+            // Speichern des JSON in einer Datei
+            File.WriteAllText(filePath, json);
+        }
+
+        public void convert(string file, string fileKatDic, string fileVersion, string delimiter, Newtonsoft.Json.Linq.JArray outputpaths, string rolloutdate) //PLXKRDS2, PLXKRDS4
+        {
+            Dictionary<string, Katalog> kataloge = new Dictionary<string, Katalog>();
+            Dictionary<string, string> katdic = new Dictionary<string, string>();
+
+            string version=null;
+            string date=null;
+
+            log.Info("Lese Datei: " + fileVersion);
+            Encoding encVersion = GetEncoding(fileVersion);
+            using (TextFieldParser parser = new TextFieldParser(fileVersion, encVersion))
+            {
+                parser.TextFieldType = FieldType.Delimited;
+                log.Info("Verwende Delimiter: '" + delimiter + "'");
+                parser.SetDelimiters(delimiter);
+
+                while (!parser.EndOfData)
+                {
+                    if (version == null)
+                    {
+                        string[] fields = parser.ReadFields();
+                        version = strip(fields[col_katversion], encVersion);
+                        date = strip(fields[col_katdate], encVersion);
+                        break;
+                    }
+                }
+
+                parser.Close();
+            }
+
+            log.Info("Lese Datei: " + fileKatDic);
+            Encoding encKat = GetEncoding(fileKatDic);
+            using (TextFieldParser parser = new TextFieldParser(fileKatDic, encKat))
+            {
+                parser.TextFieldType = FieldType.Delimited;
+                log.Info("Verwende Delimiter: '" + delimiter + "'");
+                parser.SetDelimiters(delimiter);
+                while (!parser.EndOfData)
+                {
+                    string[] fields = parser.ReadFields();
+                    string katid = strip(fields[col_katdic_katId], encKat);
+                    string katname = strip(fields[col_katdic_katName], encKat);
+
+                    if (!katdic.ContainsKey(katid))
+                    {
+                        katdic.Add(katid, katname);
+                    }
+                }
+
+                parser.Close();
+            }
+
+      
             log.Info("Lese Datei: " + file);
             Encoding enc = GetEncoding(file);
           
@@ -431,17 +571,19 @@ namespace KatalogConverter
                     string refid = strip(fields[col_refnr], enc);
                     string bezeichnung = strip(fields[col_bez], enc);
 
+                    string katalogName = katdic.ContainsKey(katalogid)?katdic[katalogid]:"";
+
                     Katalog aktKatalog;
 
-                    if (aktKatalogID == null || (aktKatalogID != katalogid && kataloge.ContainsKey(Convert.ToInt32(katalogid)) == false))
+                    if (aktKatalogID == null || (aktKatalogID != katalogid && kataloge.ContainsKey(katalogid) == false))
                     {
                         aktKatalogID = katalogid;
-                        aktKatalog = new Katalog(katalogid, rolloutdate);
-                        kataloge.Add(Convert.ToInt32(aktKatalogID), aktKatalog);
+                        aktKatalog = new Katalog(katalogid,katalogName, rolloutdate);
+                        kataloge.Add(aktKatalogID, aktKatalog);
                     }
                     else
                     {
-                        aktKatalog = kataloge[Convert.ToInt32(katalogid)];
+                        aktKatalog = kataloge[katalogid];
                     }
 
                     if (!aktKatalog.contains(refid))
@@ -449,6 +591,8 @@ namespace KatalogConverter
                         aktKatalog.add(new KatalogItem(bezeichnung, refid, von, bis));
                     }
                 }
+
+                parser.Close();
             }
 
             if (kataloge.Count > 0)
@@ -457,7 +601,27 @@ namespace KatalogConverter
                 list.Sort();
 
                 log.Info("Anzahl Kataloge: " + Convert.ToString(kataloge.Count));
-                
+
+                string temppath =  Path.Combine(Environment.CurrentDirectory, "temp");
+                temppath = Path.Combine(temppath, rolloutdate);
+                if (!Directory.Exists(temppath))
+                {
+                    Directory.CreateDirectory(temppath);
+                }
+
+                string fullpathKatDic = Path.Combine(temppath, "dictionary.json");
+                writeKatInfofile(katdic, version, date, fullpathKatDic);
+
+                foreach (string key in list)
+                {
+                    string fullpath = Path.Combine(temppath, Convert.ToString(key) + ".json");
+                    log.Debug("Schreibe Datei: " + fullpath);
+
+                    File.WriteAllText(fullpath, kataloge[key].ToString(), Encoding.UTF8);
+                }
+
+                string[] files = Directory.GetFiles(temppath);
+
                 foreach (string outputpath in outputpaths)
                 {
                     string outputlieferung = Path.Combine(outputpath, rolloutdate);
@@ -466,12 +630,16 @@ namespace KatalogConverter
                         Directory.CreateDirectory(outputlieferung);
                     }
 
-                    foreach (int key in list)
+                    foreach (string filePath in files)
                     {
-                        string fullpath = Path.Combine(outputlieferung, Convert.ToString(key) + ".json");
-                        log.Debug("Schreibe Datei: " + fullpath);
+                        // Den Dateinamen aus dem vollständigen Pfad extrahieren
+                        string fileName = Path.GetFileName(filePath);
 
-                        File.WriteAllText(fullpath, kataloge[key].ToString(), Encoding.UTF8);
+                        // Den vollständigen Ziel-Pfad erstellen
+                        string destinationPath = Path.Combine(outputlieferung, fileName);
+
+                        // Die Datei kopieren                        
+                        File.Copy(filePath, destinationPath, true); // Der dritte Parameter (true) überschreibt die Datei, falls sie bereits existiert
                     }
                 }
             }
