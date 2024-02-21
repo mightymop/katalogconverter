@@ -639,7 +639,7 @@ namespace KatalogConverter
 
                 foreach (string outputpath in outputpaths)
                 {
-                    string outputlieferung = Path.Combine(outputpath, rolloutdate);
+                    string outputlieferung = Path.Combine(outputpath, version);
                     if (!Directory.Exists(outputlieferung))
                     {
                         Directory.CreateDirectory(outputlieferung);
