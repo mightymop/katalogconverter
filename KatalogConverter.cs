@@ -624,6 +624,15 @@ namespace KatalogConverter
                     Directory.CreateDirectory(temppath);
                 }
 
+
+                foreach (string key in list)
+                {
+                    if (!katdic.ContainsKey(key))
+                    {
+                        katdic.Remove(key);
+                    }                   
+                }
+
                 string fullpathKatDic = Path.Combine(temppath, "dictionary.json");
                 writeKatInfofile(katdic, version, date, fullpathKatDic);
 
